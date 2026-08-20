@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "author": "Hamza Essafar",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": -57.6, "left": 100.84, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht1", "top": -239.7, "left": 465, "attrs": {} },
+    { "type": "wokwi-potentiometer", "id": "pot1", "top": -222.1, "left": 335.8, "attrs": {} },
+    { "type": "wokwi-a4988", "id": "drv1", "top": 225.6, "left": 254.4, "attrs": {} },
+    {
+      "type": "wokwi-rgb-led",
+      "id": "rgb1",
+      "top": -245.6,
+      "left": -123.7,
+      "attrs": { "common": "cathode" }
+    },
+    {
+      "type": "wokwi-stepper-motor",
+      "id": "stepper1",
+      "top": -255.59,
+      "left": 614.83,
+      "attrs": { "size": "17" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "dht1:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "pot1:SIG", "esp:34", "green", [ "v38.4", "h-230.8", "v-38.4" ] ],
+    [ "pot1:VCC", "esp:3V3", "red", [ "v67.2", "h-240.8", "v0", "h-28.8", "v-307.2" ] ],
+    [ "dht1:SDA", "esp:12", "green", [ "v19.2", "h-412.7", "v19.2" ] ],
+    [ "dht1:VCC", "esp:3V3", "red", [ "v48", "h-374.4" ] ],
+    [ "esp:GND.2", "pot1:GND", "black", [ "v0", "h48" ] ],
+    [ "rgb1:R", "esp:14", "green", [ "v0" ] ],
+    [ "rgb1:G", "esp:13", "green", [ "v0" ] ],
+    [ "rgb1:COM", "esp:GND.1", "green", [ "v0" ] ],
+    [ "rgb1:B", "esp:26", "green", [ "v0" ] ],
+    [ "drv1:VDD", "esp:3V3", "green", [ "h9.75", "v-268.72", "h-220.8", "v57.6" ] ],
+    [ "drv1:GND.1", "esp:GND.2", "black", [ "v0.08", "h19.35", "v-230.4", "h-124.8" ] ],
+    [ "drv1:STEP", "esp:32", "green", [ "h-240", "v-9.6" ] ],
+    [ "drv1:DIR", "esp:33", "green", [ "h-211.2", "v-153.6" ] ],
+    [ "drv1:1B", "stepper1:B-", "green", [ "h0" ] ],
+    [ "drv1:1A", "stepper1:B+", "green", [ "h0" ] ],
+    [ "stepper1:A+", "drv1:2A", "green", [ "v0" ] ],
+    [ "drv1:2B", "stepper1:A-", "green", [ "h0" ] ],
+    [ "drv1:RESET", "drv1:SLEEP", "blue", [] ],
+    [ "drv1:VMOT", "esp:5V", "red", [] ],
+    [ "drv1:GND.2", "esp:GND.2", "black", [] ]
+  ],
+  "dependencies": {}
+}
