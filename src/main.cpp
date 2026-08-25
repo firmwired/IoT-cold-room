@@ -9,64 +9,64 @@
 #define GreenPin 13
 #define RedPin 14
 #define POT_LEAK 34
-
 #define STEP_PIN 32
 #define DIR_PIN 33
 
+
 DHT dht(DHTPIN, DHTTYPE);
+
 
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
-const char* nodeRedEndpoint = "http://4.tcp.eu.ngrok.io:10994/api/telemetry";
+const char* nodeRedEndpoint = "http://5.tcp.eu.ngrok.io:25164/api/telemetry";
 
-// condition de chambre froide
-const float target_temp = 4.5;  // middle point (+2°C et +8°C)
+// parameters de chambre froide
+const float target_temp = 4.5;  // middle point (2°C et 8°C)
 const float criticalHigh = 8.0;  // maximum temperature
 const float criticalLow = 2.0; // minimum temp
 const int leakTreshold = 20;    // seuil de fuites (simulation)
 
-const int valveMax_steps = 200;
+const int valveMax_steps = 200; // max revolutions vannes 
 int valvePositionSteps = 0;
 bool coolingActive = false;
 
-float integral_error = 0.0;
+float integral_error = 0.0; // PI parameter
 
-// time scale multplier | 
+// time scale multplier  
 // 60.0 = 1min of real life passes every 1 second, 1hr of real life = 1min of simulation time
 // 360.0 = 6 minutes/1s 
 // 120.0 = 2 minutes/1s
-const float SIMULATION_SPEED = 360.0;
+// 3600 = 60 minutes/1s
+const float SIMULATION_SPEED = 3600.0;
 
 // datasheet parameters du vannes motorisée
 const float V_supply_voltage = 24.0;
 const float logicPower_mw = 264.0;
 const float I_stepping_ma = 1200.0;
 const float I_holding_ma = 400.0;
+float totalEnergy_mWh = 0.0;
+unsigned long lastEnergyCalc = 0;
+
 
 // simulation du engine physique
-float internalColdRoomTemp = 10.0; // temp INITIAL
-unsigned long lastPhysicsTime = 1000;
+float internalColdRoomTemp = 06.0; // temp INITIAL
+unsigned long lastPhysicsTime = 0;
 
 unsigned long lastLoopTime = 0;
 const unsigned long Interval = 1000; // 1s
 
-float totalEnergy_mWh = 0.0;
-unsigned long lastEnergyCalc = 0;
 bool motorMovedTHisCylce = false;
 
-
-float simulatedAmbient = 25.0;
-unsigned long lastDriftTime = 0;
-const unsigned long driftInterval = 5000;
-
-
+float simulatedTemp = 25.0;
+// unsigned long lastDriftTime = 0;
+// const unsigned long driftInterval = 5000;
 
 void setColor(int red, int green, int blue) {
     analogWrite(RedPin, red);
     analogWrite(BluePin, blue);
     analogWrite(GreenPin, green);
 }
-
+// 
 void setValvePostion(int targetSteps) {
     targetSteps = constrain(targetSteps, 0, valveMax_steps);
     int stepDiff = targetSteps - valvePositionSteps;
@@ -88,36 +88,73 @@ void setValvePostion(int targetSteps) {
     coolingActive = (valvePositionSteps > 0);
 }
 
-void updateThermalPhysics(float ambientTemp) {
+float simulatedTimeHours = 0.0;
+
+// simulation engine
+void updateThermalPhysics(int leakPercent) {
     unsigned long now = millis();
-    if (lastPhysicsTime == 0) {
+
+    if (lastPhysicsTime == 0) { 
         lastPhysicsTime = now;
         return;
     }
 
-    //  simulation speed multiplier
-    float dt_real = (now - lastPhysicsTime) / 1000.0;
+    float dt_real = (now - lastPhysicsTime) / 1000.0; // delta time (real life)
     lastPhysicsTime = now;
 
-  
-    float dt = dt_real * SIMULATION_SPEED;
-
-
-    // difference thermique. it takes 4hours for
-    float insulationLossRate = 0.000015;
-    // industrial rooms drop 4°C over 2Hrs 4/72000s
-    float maxCoolingRate = 0.00055; // °C drop per sec at 100% duty
-
-    float heatGain = (ambientTemp - internalColdRoomTemp) * insulationLossRate;
-    float valvePct = (float)valvePositionSteps / valveMax_steps;
+    float dt = dt_real * SIMULATION_SPEED; // delta time (simulation)
+    simulatedTimeHours += (dt / 3600.0); // convert to hours    
     
-    float heatExtracted = valvePct * maxCoolingRate;
+    float magasinTemp = 32.0;
+    float verticalShift = 24.0;
+    simulatedTemp = 6.0 * sin((PI / 12.0) * (simulatedTimeHours - 9.0)) + 24.0;
+
+    float insulationLossRate = 0.000015;
+    float maxCoolingRate = 0.00055; //  
+    
+    if (leakPercent > leakTreshold) {
+        insulationLossRate *= 5.0;
+    }
+
+    float heatGain = (simulatedTemp - internalColdRoomTemp) * insulationLossRate;
+    float valvePCT = (float)valvePositionSteps / valveMax_steps;
+    float heatExtracted = valvePCT * maxCoolingRate;
 
     internalColdRoomTemp += (heatGain - heatExtracted) * dt;
-    internalColdRoomTemp = constrain(internalColdRoomTemp, 0.5, ambientTemp);
-    
+    internalColdRoomTemp = constrain(internalColdRoomTemp, .5, simulatedTemp);
     
 }
+
+// void updateThermalPhysics(float ambientTemp) {
+//     unsigned long now = millis();
+//     if (lastPhysicsTime == 0) {
+//         lastPhysicsTime = now;
+//         return;
+//     }
+
+//     //  simulation speed multiplier
+//     float dt_real = (now - lastPhysicsTime) / 1000.0;
+//     lastPhysicsTime = now;
+
+  
+//     float dt = dt_real * SIMULATION_SPEED;
+
+
+//     // difference thermique. it takes 4hours for
+//     float insulationLossRate = 0.000015;
+//     // industrial rooms drop 4°C over 2Hrs 4/72000s
+//     float maxCoolingRate = 0.00055; // °C drop per sec at 100% duty
+
+//     float heatGain = (ambientTemp - internalColdRoomTemp) * insulationLossRate;
+//     float valvePct = (float)valvePositionSteps / valveMax_steps;
+    
+//     float heatExtracted = valvePct * maxCoolingRate;
+
+//     internalColdRoomTemp += (heatGain - heatExtracted) * dt;
+//     internalColdRoomTemp = constrain(internalColdRoomTemp, 0.5, ambientTemp);
+    
+    
+// }
 
 void setup() {
     Serial.begin(115200);
@@ -146,11 +183,11 @@ void loop() {
     if (now - lastLoopTime < Interval) return;
     lastLoopTime = now;
 
-    if (now - lastDriftTime >= driftInterval) {
-        simulatedAmbient += 0.1;
-        if (simulatedAmbient > 60.0) simulatedAmbient = 25.0;
-        lastDriftTime = now;
-    }
+    // if (now - lastDriftTime >= driftInterval) {
+    //     simulatedTemp += 0.1;
+    //     if (simulatedTemp > 60.0) simulatedTemp = 25.0;
+    //     lastDriftTime = now;
+    // }
 
     float ambientTemp = dht.readTemperature();
     if (ambientTemp > 50.0) ambientTemp = 50.0;
@@ -165,29 +202,38 @@ void loop() {
 
     // Run the negine
     // updateThermalPhysics(ambientTemp);
-    updateThermalPhysics(simulatedAmbient);
+    // updateThermalPhysics(simulatedTemp);
+    
+    updateThermalPhysics(leakPercent);
+    
     float currentTemp = internalColdRoomTemp;
 
-    if (sensorFault || currentTemp <= criticalLow) {
-        setValvePostion(0); 
+    // prportional integrate loop for controlling the temperature
+    // u[k] = K_p * e[k] + k_i * I[k] 
+    // u[k] output, e[k] is the error
+    if (sensorFault) {
+        setValvePostion(valveMax_steps * 0.3); // vanne ouverte à 30% en cas d'erreure
         integral_error = 0.0;
+    } else if (currentTemp <= criticalLow) {
+            setValvePostion(0);
+            integral_error = 0.0;
     } else {
         float error = currentTemp - target_temp;
         integral_error += error * 1.0; // accumulateur d'integral
         integral_error = constrain(integral_error, -100, 500);  // limits convergence vers l'infinie
 
-        float kp = 15.0; 
+        float kp = 40.0; 
         float ki = 0.5;  
 
         float p_action = error * kp;
         float i_action = integral_error * ki;
 
-        // sommation des control action et conversion vers stepper motor movements
+        // sommation des control actions et conversion vers stepper motor movements
         int calculatedSteps = (int)(p_action + i_action);
         calculatedSteps = constrain(calculatedSteps, 0, valveMax_steps);
         setValvePostion(calculatedSteps);
         
-    if (error < 0) {
+        if (error < 0) {
             integral_error *= 0.95; 
         }
     }
@@ -226,7 +272,7 @@ void loop() {
         StaticJsonDocument<348> doc;
         doc["device_id"]         = "ESP32_EEV_CONTROLLER";
         doc["temperature"]       = round(currentTemp * 10.0) / 10.0;
-        doc["ambient_temp"]      = simulatedAmbient;
+        doc["ambient_temp"]      = simulatedTemp;
         doc["humidity"]           = hum;
         doc["adc_raw"]           = rawADC;
         doc["adc_mv"]            = round(rawMilliVolts);
@@ -239,6 +285,7 @@ void loop() {
         doc["energy_mWh"]        = totalEnergy_mWh;
         doc["sensor_fault"]      = sensorFault;
         doc["rssi_dBm"]          = WiFi.RSSI();
+        doc["critical_alarm"]  = (currentTemp >= criticalHigh || currentTemp <= criticalLow);
 
         String json;
         serializeJson(doc, json);
@@ -249,7 +296,7 @@ void loop() {
 
     Serial.print(now); Serial.print(",");
     Serial.print(currentTemp, 2); Serial.print(",");
-    Serial.print(simulatedAmbient, 1); Serial.print(",");
+    Serial.print(simulatedTemp, 1); Serial.print(",");
     Serial.print(hum, 1); Serial.print(",");
     Serial.print(leakPercent); Serial.print(",");
     Serial.print(isLeak); Serial.print(",");
